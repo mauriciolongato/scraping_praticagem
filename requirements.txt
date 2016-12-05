@@ -1,0 +1,5 @@
+Js2Py==0.40
+pandas==0.18.1
+beautifulsoup4==4.5.1
+python_dateutil==2.6.0
+mysql_connector_repackaged==0.3.1
