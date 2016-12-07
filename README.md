@@ -1,6 +1,8 @@
-# Scraping - Praticagem Portos
+# Scraping - Praticagem Portos - Rio de Janeiro
 
-Versão estável:
+Scrapping do site: http://www.praticagem-rj.com.br/
+Versão estável
+
 
 # to_csv() & to_mysql()
  - Com check de status da requisição HTTP
