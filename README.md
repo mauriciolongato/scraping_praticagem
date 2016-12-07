@@ -1,6 +1,6 @@
 # Scraping - Praticagem Portos - Rio de Janeiro
 
-Scrapping do site: http://www.praticagem-rj.com.br/
+Scrapping do site: http://www.praticagem-rj.com.br
 Versão estável
 
 
