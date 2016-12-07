@@ -1,6 +1,7 @@
 import csv
 import logging
 import time
+import pandas
 from datetime import datetime
 
 import configkeys
@@ -31,9 +32,10 @@ class RioJaneiro(Scrapping):
     def __init__(self, url):
 
         super().__init__(url)
-        self.guanabara_pd = None
-        self.sepetiba_angra_pd = None
-        self.acu_pd = None
+        self.guanabara_pd = pandas.DataFrame()
+        self.sepetiba_angra_pd = pandas.DataFrame()
+        self.acu_pd = pandas.DataFrame()
+        self.forno_pd = pandas.DataFrame()
 
     def html_to_table(self):
         """
@@ -42,24 +44,28 @@ class RioJaneiro(Scrapping):
         2. Sepetiba e Angra
         3. Açu
         """
+        if self.status_HTTP_request == 200:
+            # Se a conexao e obtencao do html ocorreu com sucesso
+            try:
+                self.lista_publicacao_portos = pp.lista_portos(self.soup)
 
-        try:
-            self.guanabara_pd = pp.guanabara(self.soup)
-        except Exception:
-            logger.info("Tivemos problemas para parsear os dados do porto: Bahia de Guanabara")
-            logger.exception("message")
+            except:
+                pass
 
-        try:
-            self.sepetiba_angra_pd = pp.sepetiba_angra(self.soup)
-        except Exception:
-            logger.info("Tivemos problemas para parsear os dados do porto: Sepetiba")
-            logger.exception("message")
+            for nome_porto in self.lista_publicacao_portos.keys():
+                print(nome_porto)
+                if "GUANABARA" in nome_porto:
+                    self.guanabara_pd = self.lista_publicacao_portos[nome_porto]
 
-        try:
-            self.acu_pd = pp.acu(self.soup)
-        except Exception:
-            logger.info("Tivemos problemas para parsear os dados do porto: Acu")
-            logger.exception("message")
+                if "FORNO" in nome_porto:
+                    self.forno_pd = self.lista_publicacao_portos[nome_porto]
+
+                if "SEPETIBA" in nome_porto:
+                    self.sepetiba_angra_pd = self.lista_publicacao_portos[nome_porto]
+
+                if "AÇÚ" in nome_porto:
+                    self.acu_pd = self.lista_publicacao_portos[nome_porto]
+
 
     def to_csv(self):
         """
@@ -76,50 +82,42 @@ class RioJaneiro(Scrapping):
                       'nome_porto', 'data_abertura', 'navio_info_TIPO DE NAVIO', 'navio_info_BANDEIRA',
                       'navio_info_NOME', 'navio_info_IMO', 'navio_info_PREFIXO', 'navio_info_MMSI']
 
-        if self.html is None:
+        if self.status_HTTP_request is None:
             # atualizar as informacoes do html
             self.get_html_urllib()
 
-            # Cria um timeout para get_html_urllib
-            delta = datetime.utcnow() - self.datetime_extracao
-            if delta.total_seconds() < 20:
-                # Espere x segundos para fazer a proxima requisicao
+        if self.status_HTTP_request == 200:
+            # Tendo obtido sucesso na requisicao, inicia a estruturacao da informacao 
+            self.html_to_table()
 
-                time.sleep(5)
-                self.to_csv()
-            else:
-                logger.info("Timeout para obter o html do site")
+            # Pasta de saida do arquivo
+            datetime_str = date_formatter.datetime_to_yyyymmdd_hhmm(self.datetime_extracao.isoformat())
+            dir_out = "./dados_processados/" + datetime_str
 
-            self.to_csv()
+            # Lista os arquivos que foram parseados
+            lista_dataframes_to_csv = [self.acu_pd, self.guanabara_pd, self.sepetiba_angra_pd, self.forno_pd]
+            nomes_dataframes_to_csv = ["Acu", "Guanabara", "Sepetiba_Angra", "Forno"]
 
-        else:
-            # Caso o DataFrames ainda nao foram criados
-            if self.acu_pd is None or self.guanabara_pd is None or self.sepetiba_angra_pd is None:
-                # Inicia a contagem de tempo que estamos dispostos a ficar tentando obter html
-                self.html_to_table()
-                self.to_csv()
+            for dataframe, name in zip(lista_dataframes_to_csv, nomes_dataframes_to_csv):
 
-            else:
-                delta = datetime.utcnow() - self.datetime_extracao
-                if delta.total_seconds() < 40:
-                    datetime_str = date_formatter.datetime_to_yyyymmdd_hhmm(self.datetime_extracao.isoformat())
-                    dir_out = "./dados_processados/" + datetime_str
+                #print(name)
+                if dataframe.empty:
+                    logger.info("to_csv() - As informacoes referentes ao porto de {} estao vazias! - Pode ser que o site nao tenha informacoes referentes a esse porto ou o site mudou".format(name))
 
-                    self.guanabara_pd.to_csv(dir_out + "_Guanabara.csv", sep=";", encoding='latin-1',
+                else:
+                    # Sabendo que o dataframe nao esta vazio, produzir o arquivo
+                    try:
+                        dataframe.to_csv("{}_{}.csv".format(dir_out, name), sep=";", encoding='latin-1',
                                              doublequote=True, quotechar='"', quoting=csv.QUOTE_ALL, columns=header_out)
 
-                    self.sepetiba_angra_pd.to_csv(dir_out + "_Sepetiba_Angra.csv", sep=";", encoding='latin-1',
-                                                  doublequote=True, quotechar='"', quoting=csv.QUOTE_ALL,
-                                                  columns=header_out)
+                        logger.info("to_csv() - Arquivo produzido: {}_{}.csv".format(dir_out, name))
 
-                    self.acu_pd.to_csv(dir_out + "_Acu.csv", sep=";", encoding='latin-1', doublequote=True,
-                                       quotechar='"', quoting=csv.QUOTE_ALL, columns=header_out)
+                    except:
+                        logger.info("to_csv() - Falha ao produzir o arquivo: {}_{}.csv".format(dir_out, name))
+                        loggier.debug("erro:")
 
-                    logger.info("Arquivos produzidos: {}_Guanabara.csv, {}_Sepetiba_Angra.csv, {}_Acu".format(dir_out,
-                                                                                                              dir_out,
-                                                                                                              dir_out))
-                else:
-                    logger.info("Timeout para criar os DataFrames")
+        if self.status_HTTP_request >= 400:
+            logger.info("to_csv() - Nao foi possivel obter as informacoes do site! problemas com a requisicao: {}".format(self.status_HTTP_request))
 
     def to_mysql(self):
         """
@@ -131,141 +129,88 @@ class RioJaneiro(Scrapping):
 
         :return:
         """
-        # Chama o metodo para obtencao dos dados - chamamos o to_csv pois ele garante que teremos a base em csv tambem
-        self.to_csv()
 
-        # Define parametros de entrada
-        # Header
-        header_out_pandas = ['POB', 'NAVIO', 'CALADO', 'LOA', 'BOCA', 'GT', 'DWT', 'MANOBRA', 'DE', 'PARA', 'BRD', 
-                        'nome_porto', 'navio_info_TIPO DE NAVIO', 'navio_info_PREFIXO', 
-                        'navio_info_MMSI', 'navio_info_IMO', 'navio_info_BANDEIRA']
+        if self.status_HTTP_request is None:
+            # atualizar as informacoes do html
+            self.get_html_urllib()
 
-        # Chaves de acesso - Devem ficar guardadas no arquivo configkeys
-        keys = configkeys.mysql_keys
-        praticagem_db = dbHandler(host=keys["host"], database=keys["database"],
-                                  user=keys["login"], password=keys["senha"])
+            # feita arequisicao para o site, chama to_mysql()
+            #self.to_mysql()
 
-        # Acu
-        # ---
-        sql_table_name = "praticagem_programado_acu"
-        # Obtem as caracteristicas da tabela de atracacoes
-        sql_table_header = praticagem_db.get_header(sql_table_name)[1:]
-        sql_table_type = praticagem_db.get_columns_type(sql_table_name)[1:]
-        header_pandas_to_sql = dict(zip(header_out_pandas, sql_table_header))
+        if self.status_HTTP_request == 200:
+            # Tendo obtido sucesso na requisicao, inicia a estruturacao da informacao 
+            #print("Funfou HTTP status")
+            self.html_to_table()
 
-        # Inicia tratamento dos dados para fazer o upload - retira duplicados
-        distinct_acu = self.acu_pd[header_out_pandas].drop_duplicates()
-        distinct_acu = distinct_acu.rename(columns=header_pandas_to_sql)
+            # Lista os arquivos que foram parseados
+            lista_dataframes_to_csv = [self.acu_pd, self.guanabara_pd, self.sepetiba_angra_pd, self.forno_pd]
+            nomes_dataframes_to_csv = ["Acu", "Guanabara", "Sepetiba_Angra", "Forno"]
+            sql_table_names = ["praticagem_programado_acu", "praticagem_programado_guanabara", "praticagem_programado_sepetiba_angra", "praticagem_programado_forno"]
 
-        # Update informacoes de data com
-        distinct_acu["data_procedimento"] = distinct_acu.apply(lambda row: date_formatter.set_year_movimentacao(row["data_procedimento"]), axis=1)
-        distinct_acu = handle_pandas.format_praticagem_programado(distinct_acu)
+            # Define parametros de entrada
+            # Header
+            header_out_pandas = ['POB', 'NAVIO', 'CALADO', 'LOA', 'BOCA', 'GT', 'DWT', 'MANOBRA', 'DE', 'PARA', 'BRD', 
+                            'nome_porto', 'navio_info_TIPO DE NAVIO', 'navio_info_PREFIXO', 
+                            'navio_info_MMSI', 'navio_info_IMO', 'navio_info_BANDEIRA']
 
-        # Obtem somente o diferencial das informacoes entre o scrap atual e os dados que temos na base de dados
-        historico_acu = praticagem_db.get_select_top_100(sql_table_name)
-        historico_acu = historico_acu[list(sql_table_header)].drop_duplicates()
-        acu_insert_target = handle_pandas.get_diff(historico_acu, distinct_acu)
+            # Chaves de acesso - Devem ficar guardadas no arquivo configkeys
+            keys = configkeys.mysql_keys
+            praticagem_db = dbHandler(host=keys["host"], database=keys["database"],
+                                      user=keys["login"], password=keys["senha"])
 
-        # Cria os chunks dos dados
-        acu_chunk = [tuple(x) for x in acu_insert_target.values]
-        acu_chunk_aux = []
-        for row in acu_chunk:    
-            acu_chunk_aux.append(tuple([str(x) for x in row]))
+            for dataframe, nome, sql_table_name in zip(lista_dataframes_to_csv, nomes_dataframes_to_csv, sql_table_names):
 
-        # Trata chunk de dados
-        chunk_acu_final = praticagem_db.chunk_to_data_type_filter(acu_chunk_aux, sql_table_type)
+                #print(nome, sql_table_names)
+                # Verifica se o dataframe nao esta vazio
+                if dataframe.empty:
+                    logger.info("to_mysql() - As informacoes referentes ao porto de {} estao vazias! - Pode ser que o site nao tenha informacoes referentes a esse porto ou o site mudou".format(nome))
 
-        # Insere os dados
-        if chunk_acu_final == []:
-            logger.info("Acu: Dados nao inseridos; Somente dados repetidos")
-        else:
-            praticagem_db.insert_chunk(sql_table_name, sql_table_header, chunk_acu_final)
+                else:
+                    logger.info("to_mysql() - Iniciado o processo para insercao dos dados do porto: {}".format(nome))
+                    #print(nome, sql_table_name)
+                    # Obtem as caracteristicas da tabela de atracacoes
+                    sql_table_header = praticagem_db.get_header(sql_table_name)[1:]
+                    sql_table_type = praticagem_db.get_columns_type(sql_table_name)[1:]
+                    header_pandas_to_sql = dict(zip(header_out_pandas, sql_table_header))
 
+                    # Inicia tratamento dos dados para fazer o upload - retira duplicados
+                    distinct_pd = dataframe[header_out_pandas].drop_duplicates()
+                    distinct_pd = distinct_pd.rename(columns=header_pandas_to_sql)
 
-        # Guanabara
-        # ---------
-        sql_table_name = "praticagem_programado_guanabara"
-        # Obtem as caracteristicas da tabela de atracacoes
-        sql_table_header = praticagem_db.get_header(sql_table_name)[1:]
-        sql_table_type = praticagem_db.get_columns_type(sql_table_name)[1:]
-        header_pandas_to_sql = dict(zip(header_out_pandas, sql_table_header))        
-        
-        # Inicia tratamento dos dados para fazer o upload - retira duplicados
-        distinct_guanabara = self.guanabara_pd[header_out_pandas].drop_duplicates()
-        distinct_guanabara = distinct_guanabara.rename(columns=header_pandas_to_sql)
+                    # Update informacoes de data com
+                    distinct_pd["data_procedimento"] = distinct_pd.apply(lambda row: date_formatter.set_year_movimentacao(row["data_procedimento"]), axis=1)
+                    distinct_pd = handle_pandas.format_praticagem_programado(distinct_pd)
+                    #print(distinct_pd)
+                    # Obtem somente o diferencial das informacoes entre o scrap atual e os dados que temos na base de dados
+                    historico_pd = praticagem_db.get_select_top_100(sql_table_name)
+                    historico_pd = historico_pd[list(sql_table_header)].drop_duplicates()
+                    
+                    # Inicia o processo de comparacao entre os dados correntes do site (distinct_pd) e os da base de dados (historico_pd)
+                    # 1. Colocar ambos os dados no mesmo formato
+                    historico_pd_chunk = []
+                    for row in [tuple(x) for x in historico_pd.values]:    
+                        historico_pd_chunk.append(tuple([str(x).replace('\xa0', 'None') for x in row]))
 
-        # Update informacoes de data
-        distinct_guanabara["data_procedimento"] = distinct_guanabara.apply(lambda row: date_formatter.set_year_movimentacao(row["data_procedimento"]), axis=1)
-        distinct_guanabara = handle_pandas.format_praticagem_programado(distinct_guanabara)
+                    distinct_pd_chunk = []
+                    for row in [tuple(x) for x in distinct_pd.values]:    
+                        distinct_pd_chunk.append(tuple([str(x).replace('\xa0', 'None') for x in row]))
 
-        # Obtem somente o diferencial das informacoes entre o scrap atual e os dados que temos na base de dados
-        historico_guanabara = praticagem_db.get_select_top_100(sql_table_name)
-        historico_guanabara = historico_guanabara[list(sql_table_header)].drop_duplicates()
-        guanabara_insert_target = handle_pandas.get_diff(historico_guanabara, distinct_guanabara)
+                    # Obtem o diferencial considerando somente as informacoes do site
+                    pd_insert_target = set(distinct_pd_chunk)-set(historico_pd_chunk)
 
-        # Cria os chunks dos dados
-        guanabara_chunk = [tuple(x) for x in guanabara_insert_target.values]
-        guanabara_chunk_aux = []
-        for row in guanabara_chunk:    
-            guanabara_chunk_aux.append(tuple([str(x) for x in row]))
-
-        # Trata chunk de dados
-        # OBS: O site nao fornece o ano da atracacao, sendo assim, adotamos o valor descrito na funcao helpers/date_formater/set_year_movimentacao
-        #   isso pode causar desencontros na virada do ano
-        chunk_guanabara_final = praticagem_db.chunk_to_data_type_filter(guanabara_chunk_aux, sql_table_type)
-        #for row in chunk_guanabara_final:
-        #    print(row)
-
-        # Obtem o diferencial das informacoes ja existentes ja base de dados e o apresentado no site
-        # Insere os dados
-        if chunk_guanabara_final == []:
-            logger.info("Guanabara: Dados nao inseridos; Somente dados repetidos")
-        else:
-            praticagem_db.insert_chunk(sql_table_name, sql_table_header, chunk_guanabara_final)
-
-
-        # Sepetiba e angra
-        # ----------------
-        # nome da tabela que vai receber os dados
-        sql_table_name = "praticagem_programado_sepetiba_angra"
-        # Obtem as caracteristicas da tabela de atracacoes
-        sql_table_header = praticagem_db.get_header(sql_table_name)[1:]
-        sql_table_type = praticagem_db.get_columns_type(sql_table_name)[1:]
-        header_pandas_to_sql = dict(zip(header_out_pandas, sql_table_header))        
-        
-        # Inicia tratamento dos dados para fazer o upload - retira duplicados
-        distinct_sepetiba_angra = self.sepetiba_angra_pd[header_out_pandas].drop_duplicates()
-        distinct_sepetiba_angra = distinct_sepetiba_angra.rename(columns=header_pandas_to_sql)
-
-        # Update informacoes de data
-        distinct_sepetiba_angra["data_procedimento"] = distinct_sepetiba_angra.apply(lambda row: date_formatter.set_year_movimentacao(row["data_procedimento"]), axis=1)
-        distinct_sepetiba_angra = handle_pandas.format_praticagem_programado(distinct_sepetiba_angra)
-
-        # Obtem somente o diferencial das informacoes entre o scrap atual e os dados que temos na base de dados
-        historico_sepetiba_angra = praticagem_db.get_select_top_100(sql_table_name)
-        historico_sepetiba_angra = historico_sepetiba_angra[list(sql_table_header)].drop_duplicates()
-        sepetiba_angra_insert_target = handle_pandas.get_diff(historico_sepetiba_angra, distinct_sepetiba_angra)
-
-        # Cria os chunks dos dados
-        sepetiba_angra_chunk = [tuple(x) for x in sepetiba_angra_insert_target.values]
-        sepetiba_angra_chunk_aux = []
-        for row in sepetiba_angra_chunk:    
-            sepetiba_angra_chunk_aux.append(tuple([str(x) for x in row]))
-
-        # Trata chunk de dados
-        # OBS: O site nao fornece o ano da atracacao, sendo assim, adotamos o valor descrito na funcao helpers/date_formater/set_year_movimentacao
-        #   isso pode causar desencontros na virada do ano
-        chunk_sepetiba_angra_final = praticagem_db.chunk_to_data_type_filter(sepetiba_angra_chunk_aux, sql_table_type)
-
-        # Obtem o diferencial das informacoes ja existentes ja base de dados e o apresentado no site
-        # Insere os dados
-        if chunk_sepetiba_angra_final == []:
-            logger.info("Sepetiba-Angra: Dados nao inseridos; Somente dados repetidos")
-        else:
-            praticagem_db.insert_chunk(sql_table_name, sql_table_header, chunk_sepetiba_angra_final)
+                    # Formata os dados para mandar para o SQL
+                    chunk_pd_final = praticagem_db.chunk_to_data_type_filter(pd_insert_target, sql_table_type)
+                    
+                    # Insere os dados
+                    if chunk_pd_final == []:
+                        logger.info("to_mysql() - {}: Dados nao inseridos; Somente dados repetidos".format(nome))
+                    else:
+                        logger.info("to_mysql() - {}: foram inseridos {} linhas".format(nome, len(chunk_pd_final)))
+                        praticagem_db.insert_chunk(sql_table_name, sql_table_header, chunk_pd_final)
 
 
 if __name__ == "__main__":
     ss.make_dir()
     RJ = RioJaneiro(url="http://www.praticagem-rj.com.br/")
     RJ.to_mysql()
+    RJ.to_csv()

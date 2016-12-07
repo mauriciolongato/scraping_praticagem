@@ -28,118 +28,46 @@ def parse_dados_navio(linha_info, navios):
     return dict(zip(header, data_navio))
 
 
-def guanabara(soup):
+def lista_portos(soup):
     """
     Estutura a informacao da pagina: http://www.praticagem-rj.com.br/
 
     :param soup: BeautifulSoup obj
     :return: Pandas DataFrame ou False caso tenhamos problemas
     """
+    # quadro = soup.find_all("td", class_="quadro")
+    lista_publicacao_portos = {}
+    for quadro in soup.find_all("td", class_="quadro"):
 
-    # Obtem o quadro que dados da bahia de guanabara estao disponiveis
-    quadro = soup.find_all("td", class_="quadro")[1]
-    header = [x.text for x in quadro.find_all("th")] + ["nome_porto", "data_abertura"]
-    nome_porto = quadro.find("span").text.split(" - ")[0]
-    data_abertura = quadro.find("span").text.split(" - ")[1]
-    navios = js2py.eval_js("var " + soup.find_all("script", language="javascript")[0].text.split("var")[1])
+        try:
+            # Parseia cada uma das informacoes
+            header = [x.text for x in quadro.find_all("th")] + ["nome_porto", "data_abertura"]
+            nome_porto = quadro.find("span").text.split(" - ")[0]
+            data_abertura = quadro.find("span").text.split(" - ")[1]
+            navios = js2py.eval_js("var " + soup.find_all("script", language="javascript")[0].text.split("var")[1])
 
-    # Formata dados
-    data_table = [x.find_all("td") for x in quadro.find_all("tr")[3:]]
-    data_out = []
-    for row in data_table:
-        row_aux = {"nome_porto": nome_porto, "data_abertura": data_abertura}
-        for key, value in zip(header, row):
+            # Formata dados
+            data_table = [x.find_all("td") for x in quadro.find_all("tr")[3:]]
+            data_out = []
+            for row in data_table:
+                row_aux = {"nome_porto": nome_porto, "data_abertura": data_abertura}
+                for key, value in zip(header, row):
 
-            if key == "NAVIO":
-                # Para obter a informacao do navio
-                navio_n = int("".join([s for s in str(value.a["onmouseover"]) if s.isdigit()]))
-                data_navio = parse_dados_navio(navio_n, navios)
-                header_navios = list(data_navio.keys())
-                row_aux[key] = value.text
+                    if key == "NAVIO":
+                        # Para obter a informacao do navio
+                        navio_n = int("".join([s for s in str(value.a["onmouseover"]) if s.isdigit()]))
+                        data_navio = parse_dados_navio(navio_n, navios)
+                        header_navios = list(data_navio.keys())
 
-            else:
-                row_aux[key] = value.text
+                    row_aux[key] = value.text
 
-        row_aux.update(data_navio)
-        data_out.append(row_aux)
+                row_aux.update(data_navio)
+                data_out.append(row_aux)
 
-    header = header + header_navios
-    return pandas.DataFrame(data=data_out, columns=header)
+            header = header + header_navios
+            lista_publicacao_portos[nome_porto] = pandas.DataFrame(data=data_out, columns=header)
 
+        except Exception:
+            pass
 
-def sepetiba_angra(soup):
-    """
-    Estutura a informacao da pagina: http://www.praticagem-rj.com.br/
-
-    :param soup: BeautifulSoup obj
-    :return: Pandas DataFrame ou False caso tenhamos problemas
-    """
-
-    # Obtem o quadro que dados de sepetiba e angra estao disponiveis
-    quadro = soup.find_all("td", class_="quadro")[2]
-    header = [x.text for x in quadro.find_all("th")] + ["nome_porto", "data_abertura"]
-    nome_porto = quadro.find("span").text.split(" - ")[0]
-    data_abertura = quadro.find("span").text.split(" - ")[1]
-    navios = js2py.eval_js("var "+ soup.find_all("script", language="javascript")[0].text.split("var")[1])
-
-    # Formata dados
-    data_table = [x.find_all("td") for x in quadro.find_all("tr")[3:]]
-    data_out = []
-    for row in data_table:
-        row_aux = {"nome_porto": nome_porto, "data_abertura": data_abertura}
-        for key, value in zip(header, row):
-
-            if key == "NAVIO":
-                # Para obter a informacao do navio
-                navio_n = int("".join([s for s in str(value.a["onmouseover"]) if s.isdigit()]))
-                data_navio = parse_dados_navio(navio_n, navios)
-                header_navios = list(data_navio.keys())
-                row_aux[key] = value.text
-
-            else:
-                row_aux[key] = value.text
-
-        row_aux.update(data_navio)
-        data_out.append(row_aux)
-
-    header = header + header_navios
-    return pandas.DataFrame(data=data_out, columns=header)
-
-
-
-def acu(soup):
-    """
-    Estutura a informacao da pagina: http://www.praticagem-rj.com.br/
-
-    :param soup: BeautifulSoup obj
-    :return: Pandas DataFrame ou False caso tenhamos problemas
-    """
-
-    # Obtem o quadro que dados de Acu estao disponiveis
-    quadro = soup.find_all("td", class_="quadro")[3]
-    header = [x.text for x in quadro.find_all("th")] + ["nome_porto", "data_abertura"]
-    nome_porto = quadro.find("span").text.split(" - ")[0]
-    data_abertura = quadro.find("span").text.split(" - ")[1]
-    navios = js2py.eval_js("var "+ soup.find_all("script", language="javascript")[0].text.split("var")[1])
-
-    # Formata dados
-    data_table = [x.find_all("td") for x in quadro.find_all("tr")[3:]]
-    data_out = []
-    for row in data_table:
-        row_aux = {"nome_porto": nome_porto, "data_abertura": data_abertura}
-        for key, value in zip(header, row):
-
-            if key == "NAVIO":
-                # Para obter a informacao do navio
-                navio_n = int("".join([s for s in str(value.a["onmouseover"]) if s.isdigit()]))
-                data_navio = parse_dados_navio(navio_n, navios)
-                header_navios = list(data_navio.keys())
-
-            row_aux[key] = value.text
-
-        row_aux.update(data_navio)
-        data_out.append(row_aux)
-
-    header = header + header_navios
-    return pandas.DataFrame(data=data_out, columns=header)
-
+    return lista_publicacao_portos

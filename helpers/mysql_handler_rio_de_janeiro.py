@@ -39,6 +39,11 @@ def str_to_float(x):
 
 def str_to_int(x):
     try:
+        if "." in x:
+            x = x.split(".")[0]
+        else:
+            pass
+
         x = int(x)
         return x
     except:
@@ -59,6 +64,9 @@ def data_type_csv_to_python(data_cell, type_):
 
     if data_cell == None:
         return data_cell
+
+    if data_cell == 'None':
+        return None
 
     if data_cell.strip() == '':
         return None
@@ -114,7 +122,7 @@ class dbHandler:
         :return: retorna pandas DataFrame
         """
 
-        query = "select * from {} limit 100;".format(table_name)
+        query = "select * from {} order by id_procedimento desc limit 100;".format(table_name)
         try:
 
             conn = mysql.connector.connect(host=self.host, database=self.database, user=self.user,

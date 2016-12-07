@@ -1,9 +1,9 @@
 import pandas
 import datetime
+import math
 
 
 def str_to_float(x):
-
     try:
         x = x.replace(",", ".")
         x = float(x)
@@ -12,11 +12,16 @@ def str_to_float(x):
         return x
 
 def str_to_int(x):
+
     try:
         x = int(x)
         return x
     except:
-        return x
+
+        if math.isnan(x):
+            return 0
+        else:
+            return x
 
 def data_type_pandas(data_cell, type_):
     """
@@ -30,11 +35,14 @@ def data_type_pandas(data_cell, type_):
     letters = "abcdefghijklmnopqrstuvxyz"
     type_ = "".join([x for x in str(type_) if x in letters])
 
+    if data_cell == "Timestamp":
+        return data_cell
+
     if data_cell == None:
         return 'None'
 
-    if data_cell.strip() == '':
-        return 'None'
+    if data_cell == 'nan':
+        return None
 
     if type_ == 'int':
         data_cell = str_to_int(data_cell)
@@ -57,9 +65,13 @@ def data_type_pandas(data_cell, type_):
         return datetime.datetime.strptime(data_cell, format).time()
 
     if type_ == 'datetime':
+        data_cell = str(data_cell)
         format = "%Y-%m-%d %H:%M:%S"
         date = datetime.datetime.strptime(data_cell, format)
         return date
+
+    if data_cell.strip() == '':
+        return 'None'
 
 def get_diff(df1, df2):
     """
@@ -75,11 +87,13 @@ def get_diff(df1, df2):
     idx = [x[0] for x in df_gpby.groups.values() if len(x) == 1]
 
     df_out = df.reindex(idx)
-    
+    #print("\n")
+    #print("get_diff")
+    #print(df_out)
     return df_out
 
 def format_praticagem_programado(dataframe):
-        
+
         dataframe["data_procedimento"] = dataframe.apply(lambda row: data_type_pandas(row["data_procedimento"], "datetime"), axis=1)
         dataframe["nome_navio"] = dataframe.apply(lambda row: data_type_pandas(row["nome_navio"], "varchar(200)"), axis=1)
         dataframe["calado"] = dataframe.apply(lambda row: data_type_pandas(row["calado"], "float"), axis=1)
@@ -98,4 +112,23 @@ def format_praticagem_programado(dataframe):
         dataframe["imo"] = dataframe.apply(lambda row: data_type_pandas(row["imo"], "int(11)"), axis=1)
         dataframe["bandeira"] = dataframe.apply(lambda row: data_type_pandas(row["bandeira"], "varchar(200)"), axis=1) 
 
+
         return dataframe
+
+
+if __name__ == "__main__":
+    import configkeys
+    from mysql_handler_rio_de_janeiro import dbHandler
+
+    keys = configkeys.mysql_keys
+    praticagem_db = dbHandler(host=keys["host"], database=keys["database"],
+                            user=keys["login"], password=keys["senha"])
+
+    sql_table_name = "praticagem_programado_sepetiba_angra"
+    historico_pd = praticagem_db.get_select_top_100(sql_table_name)
+    historico_pd["mmsi"] = historico_pd.apply(lambda row: data_type_pandas(row["mmsi"], "int(11)"), axis=1)
+    #historico_pd = format_praticagem_programado(historico_pd)
+    print(historico_pd)
+    frame = historico_pd["mmsi"].astype('int')
+    print(frame)
+    #print(historico_pd["mmsi"])
